@@ -49,8 +49,19 @@ int main()
 
 	int client_addr_len = sizeof(struct sockaddr_in);
 	struct sockaddr_in client_addr;
-	accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
+	int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
+	if (client_fd  == -1) {
+		perror("accept");
+		return 1;
+	}
+
 	printf("Client connected\n");
+
+	char response_line[] = "HTTP/1.1 200 OK\r\n\r\n";
+	if (send(client_fd, response_line, strlen(response_line), 0) == -1) {
+		perror("send");
+		return 1;
+	}
 
 	close(server_fd);
 
