@@ -10,6 +10,7 @@
 
 #define CONTENT_TYPE "Content-Type"
 #define CONTENT_LENGTH "Content-Length"
+#define USER_AGENT "User-Agent"
 #define TEXT_PLAIN "text/plain"
 
 typedef struct header_s
@@ -98,6 +99,20 @@ void headers_clear(header_t *header)
 		free(header);
 		header = next;
 	}
+}
+
+const char *headers_get(header_t *first, const char *key)
+{
+	header_t *header = first;
+	while (header)
+	{
+		if (strcasecmp(key, header->key) == 0)
+			return (header->value);
+		
+		header = header->next;
+	}
+
+	return ("");
 }
 
 size_t recv_line(int fd, char *buffer, size_t length)
@@ -218,6 +233,9 @@ int main()
 		char *key = strtok(buffer, ": ");
 		char *value = key + strlen(key) + 1;
 
+		while (*value == ' ')
+			++value;
+
 		request.headers = headers_add(request.headers, key, value);
 		printf("%p %p\n\n", request.headers, request.headers->next);
 	}
@@ -237,6 +255,15 @@ int main()
 		response.body = body;
 		response.body_length = strlen(body);
 	}
+	else if (strcmp("/user-agent", request.path) == 0)
+	{
+		char *body = strdup(headers_get(request.headers, USER_AGENT));
+
+		response.status = OK;
+		response.headers = headers_add(response.headers, CONTENT_TYPE, TEXT_PLAIN);
+		response.body = body;
+		response.body_length = strlen(body);
+	}
 	else
 	{
 		response.status = NOT_FOUND;
@@ -247,9 +274,12 @@ int main()
 		response.headers = headers_add_number(response.headers, CONTENT_LENGTH, response.body_length);
 	}
 
-	int status_code = STATUS_TO_CODE[response.status];
-	const char *status_phrase = STATUS_TO_PHRASE[response.status];
-	sprintf(buffer, "HTTP/1.1 %d %s\r\n", status_code, status_phrase);
+	{
+		int status_code = STATUS_TO_CODE[response.status];
+		const char *status_phrase = STATUS_TO_PHRASE[response.status];
+
+		sprintf(buffer, "HTTP/1.1 %d %s\r\n", status_code, status_phrase);
+	}
 
 	if (send(client_fd, buffer, strlen(buffer), 0) == -1)
 	{
