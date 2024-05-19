@@ -74,10 +74,7 @@ header_t *headers_add(header_t *previous, const char *key, const char *value)
 
 	header->key = strdup(key);
 	header->value = strdup(value);
-	header->next = NULL;
-
-	if (previous)
-		previous->next = header;
+	header->next = previous;
 
 	return (header);
 }
@@ -109,7 +106,6 @@ size_t recv_line(int fd, char *buffer, size_t length)
 
 	for (index = 0; index < length - 1; ++index)
 	{
-
 		char value = 0;
 
 		if (recv(fd, &value, 1, 0) != 1)
@@ -223,6 +219,7 @@ int main()
 		char *value = key + strlen(key) + 1;
 
 		request.headers = headers_add(request.headers, key, value);
+		printf("%p %p\n\n", request.headers, request.headers->next);
 	}
 
 	response_t response = {};
