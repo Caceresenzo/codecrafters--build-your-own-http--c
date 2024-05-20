@@ -33,6 +33,7 @@ typedef enum
 typedef enum
 {
 	OK,
+	CREATED,
 	NOT_FOUND
 } status_t;
 
@@ -41,6 +42,8 @@ typedef struct
 	method_t method;
 	char *path;
 	header_t *headers;
+	unsigned char *body;
+	size_t body_length;
 } request_t;
 
 typedef struct
@@ -53,11 +56,13 @@ typedef struct
 
 static const int STATUS_TO_CODE[] = {
 	[OK] = 200,
+	[CREATED] = 201,
 	[NOT_FOUND] = 404,
 };
 
 static const char *STATUS_TO_PHRASE[] = {
 	[OK] = "OK",
+	[CREATED] = "Created",
 	[NOT_FOUND] = "Not Found",
 };
 
@@ -235,7 +240,7 @@ int main(int argc, char **argv)
 	}
 
 	request_t request = {};
-	{
+	/* parse request */ {
 		char *method = strtok(buffer, " ");
 		char *path = strtok(method + strlen(method) + 1, " ");
 		char *version = strtok(path + strlen(path) + 1, " ");
@@ -244,32 +249,48 @@ int main(int argc, char **argv)
 
 		request.method = method_valueof(method);
 		request.path = strdup(path);
-	}
 
-	while (true)
-	{
-		size_t length = recv_line(client_fd, buffer, sizeof(buffer));
-		if (length == -1)
+		while (true)
 		{
-			perror("recv_line");
-			return (1);
+			size_t length = recv_line(client_fd, buffer, sizeof(buffer));
+			if (length == -1)
+			{
+				perror("recv_line");
+				return (1);
+			}
+
+			if (length == 0)
+			{
+				break;
+			}
+
+			char *key = strtok(buffer, ": ");
+			char *value = key + strlen(key) + 1;
+
+			while (*value == ' ')
+				++value;
+
+			request.headers = headers_add(request.headers, key, value);
 		}
 
-		if (length == 0)
+		if (request.method == POST)
 		{
-			break;
+			int content_length = atoi(headers_get(request.headers, CONTENT_LENGTH) ?: "0");
+			unsigned char *body = malloc(content_length);
+
+			if (recv(client_fd, body, content_length, 0) == -1)
+			{
+				perror("recv ~ request body");
+				return (1);
+			}
+
+			request.body = body;
+			request.body_length = content_length;
 		}
-
-		char *key = strtok(buffer, ": ");
-		char *value = key + strlen(key) + 1;
-
-		while (*value == ' ')
-			++value;
-
-		request.headers = headers_add(request.headers, key, value);
 	}
 
 	response_t response = {};
+	response.status = NOT_FOUND;
 
 	if (strcmp("/", request.path) == 0)
 	{
@@ -297,31 +318,38 @@ int main(int argc, char **argv)
 	{
 		char *path = request.path + 7;
 
-		int fd = open(path, O_RDONLY);
-		if (fd == -1)
+		if (request.method == GET)
 		{
-			response.status = NOT_FOUND;
+			int fd = open(path, O_RDONLY);
+			if (fd != -1)
+			{
+				struct stat statbuf;
+				fstat(fd, &statbuf);
+
+				size_t length = statbuf.st_size;
+				unsigned char *body = malloc(length);
+				read(fd, body, length);
+
+				close(fd);
+
+				response.status = OK;
+				response.headers = headers_add(response.headers, CONTENT_TYPE, APPLICATION_OCTET_STREAM);
+				response.body = body;
+				response.body_length = length;
+			}
 		}
-		else
+		else if (request.method == POST)
 		{
-			struct stat statbuf;
-			fstat(fd, &statbuf);
+			int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC);
+			if (fd != -1)
+			{
+				write(fd, request.body, request.body_length);
 
-			size_t length = statbuf.st_size;
-			unsigned char *body = malloc(length);
-			read(fd, body, length);
+				close(fd);
 
-			close(fd);
-
-			response.status = OK;
-			response.headers = headers_add(response.headers, CONTENT_TYPE, APPLICATION_OCTET_STREAM);
-			response.body = body;
-			response.body_length = length;
+				response.status = CREATED;
+			}
 		}
-	}
-	else
-	{
-		response.status = NOT_FOUND;
 	}
 
 	if (response.body)
@@ -373,6 +401,7 @@ int main(int argc, char **argv)
 
 	free(request.path);
 	headers_clear(request.headers);
+	free(request.body);
 
 	headers_clear(response.headers);
 	free(response.body);
