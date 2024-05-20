@@ -148,10 +148,18 @@ size_t recv_line(int fd, char *buffer, size_t length)
 	return (index);
 }
 
-int main()
+int main(int argc, char **argv)
 {
 	setbuf(stdout, NULL);
 	printf("codecrafters build-your-own-http\n");
+
+	if (argc == 3)
+	{
+		const char *directory = argv[2];
+
+		printf("directory: %s\n", directory);
+		chdir(directory);
+	}
 
 	int server_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (server_fd == -1)
