@@ -186,16 +186,35 @@ int main()
 		return (1);
 	}
 
-	int client_addr_len = sizeof(struct sockaddr_in);
-	struct sockaddr_in client_addr;
-	int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
-	if (client_fd == -1)
+	int client_fd;
+	while (true)
 	{
-		perror("accept");
-		return (1);
-	}
+		int client_addr_len = sizeof(struct sockaddr_in);
+		struct sockaddr_in client_addr;
+		client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
+		if (client_fd == -1)
+		{
+			perror("accept");
+			return (1);
+		}
 
-	printf("Client connected\n");
+		printf("Client connected\n");
+
+		pid_t pid = fork();
+		if (pid == -1)
+		{
+			perror("fork");
+			return (1);
+		}
+
+		if (pid != 0)
+		{
+			close(client_fd);
+			continue;
+		}
+
+		break;
+	}
 
 	char buffer[512];
 	if (recv_line(client_fd, buffer, sizeof(buffer)) == -1)
@@ -237,7 +256,6 @@ int main()
 			++value;
 
 		request.headers = headers_add(request.headers, key, value);
-		printf("%p %p\n\n", request.headers, request.headers->next);
 	}
 
 	response_t response = {};
