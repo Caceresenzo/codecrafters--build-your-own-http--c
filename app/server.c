@@ -290,20 +290,26 @@ int main()
 		char *path = request.path + 7;
 
 		int fd = open(path, O_RDONLY);
+		if (fd == -1)
+		{
+			response.status = NOT_FOUND;
+		}
+		else
+		{
+			struct stat statbuf;
+			fstat(fd, &statbuf);
 
-		struct stat statbuf;
-		fstat(fd, &statbuf);
+			size_t length = statbuf.st_size;
+			unsigned char *body = malloc(length);
+			read(fd, body, length);
 
-		size_t length = statbuf.st_size;
-		unsigned char *body = malloc(length);
-		read(fd, body, length);
+			close(fd);
 
-		close(fd);
-
-		response.status = OK;
-		response.headers = headers_add(response.headers, CONTENT_TYPE, APPLICATION_OCTET_STREAM);
-		response.body = body;
-		response.body_length = length;
+			response.status = OK;
+			response.headers = headers_add(response.headers, CONTENT_TYPE, APPLICATION_OCTET_STREAM);
+			response.body = body;
+			response.body_length = length;
+		}
 	}
 	else
 	{
