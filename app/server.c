@@ -243,6 +243,20 @@ int main(int argc, char **argv)
 
 	if (response.body)
 	{
+		const char *accept_encoding = headers_get(request.headers, ACCEPT_ENCODING);
+		if (accept_encoding)
+		{
+			encoder_t encoder = encoder_get(accept_encoding);
+			if (encoder)
+			{
+				response.headers = headers_add(response.headers, CONTENT_ENCODING, accept_encoding);
+
+				// unsigned char *old_body = response.body;
+				// response.body_length = encoder(old_body, response.body_length, &response.body);
+				// free(old_body);
+			}
+		}
+
 		response.headers = headers_add_number(response.headers, CONTENT_LENGTH, response.body_length);
 	}
 

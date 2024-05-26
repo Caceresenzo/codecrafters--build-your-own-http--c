@@ -73,3 +73,27 @@ const char *headers_get(header_t *first, const char *key)
 
 	return ("");
 }
+
+size_t gzip(unsigned char *input, size_t input_size, unsigned char **output_pointer)
+{
+    return (0);
+}
+
+static encoding_t encodings[] = {
+    { "gzip", gzip },
+    { NULL }
+};
+
+encoder_t encoder_get(const char *name)
+{
+    encoding_t *encoding = encodings;
+    while (encoding->name)
+    {
+        if (strcasecmp(encoding->name, name) == 0)
+            return (encoding->encoder);
+
+		++encoding;
+    }
+
+    return (NULL);
+}
