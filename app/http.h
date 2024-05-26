@@ -10,6 +10,7 @@
 # define CONTENT_ENCODING "Content-Encoding"
 # define TEXT_PLAIN "text/plain"
 # define APPLICATION_OCTET_STREAM "application/octet-stream"
+# define COMA ","
 
 typedef struct header_s
 {

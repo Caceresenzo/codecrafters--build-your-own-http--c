@@ -243,14 +243,29 @@ int main(int argc, char **argv)
 
 	if (response.body)
 	{
-		const char *accept_encoding = headers_get(request.headers, ACCEPT_ENCODING);
-		if (accept_encoding)
+		const char *accept_encodings = headers_get(request.headers, ACCEPT_ENCODING);
+		if (accept_encodings)
 		{
-			encoder_t encoder = encoder_get(accept_encoding);
+			encoder_t encoder = NULL;
+
+			char *accept_encoding = strtok((char*)accept_encodings, COMA);
+			while (accept_encoding)
+			{
+				while (*accept_encoding == ' ')
+					++accept_encoding;
+
+				encoder = encoder_get(accept_encoding);
+				if (encoder)
+				{
+					response.headers = headers_add(response.headers, CONTENT_ENCODING, accept_encoding);
+					break;
+				}
+
+				accept_encoding = strtok(NULL, COMA);
+			}
+
 			if (encoder)
 			{
-				response.headers = headers_add(response.headers, CONTENT_ENCODING, accept_encoding);
-
 				// unsigned char *old_body = response.body;
 				// response.body_length = encoder(old_body, response.body_length, &response.body);
 				// free(old_body);
