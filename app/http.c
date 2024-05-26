@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <zlib.h>
 
 #include "http.h"
 
@@ -74,9 +75,27 @@ const char *headers_get(header_t *first, const char *key)
 	return ("");
 }
 
+/// https://stackoverflow.com/a/57699371/7292958
 size_t gzip(unsigned char *input, size_t input_size, unsigned char **output_pointer)
 {
-    return (0);
+	size_t output_size = 128 + input_size;
+	unsigned char* output = malloc(output_size);
+
+    z_stream z;
+    z.zalloc = Z_NULL;
+    z.zfree = Z_NULL;
+    z.opaque = Z_NULL;
+    z.avail_in = input_size;
+    z.next_in = input;
+    z.avail_out = output_size;
+    z.next_out = output;
+
+    deflateInit2(&z, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | 16, 8, Z_DEFAULT_STRATEGY);
+    deflate(&z, Z_FINISH);
+    deflateEnd(&z);
+
+	*output_pointer = output;
+    return (z.total_out);
 }
 
 static encoding_t encodings[] = {

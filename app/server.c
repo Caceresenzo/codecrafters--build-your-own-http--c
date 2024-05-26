@@ -266,9 +266,9 @@ int main(int argc, char **argv)
 
 			if (encoder)
 			{
-				// unsigned char *old_body = response.body;
-				// response.body_length = encoder(old_body, response.body_length, &response.body);
-				// free(old_body);
+				unsigned char *old_body = response.body;
+				response.body_length = encoder(old_body, response.body_length, &response.body);
+				free(old_body);
 			}
 		}
 
