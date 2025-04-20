@@ -284,6 +284,11 @@ int main(int argc, char **argv)
 		}
 		else
 			response.headers = headers_add_number(response.headers, CONTENT_LENGTH, 0);
+		
+		const char* connection = headers_get(response.headers, CONNECTION);
+		bool should_close = connection && strcmp(connection, CONNECTION_CLOSE) == 0;
+		if (should_close)
+			response.headers = headers_add(response.headers, CONNECTION, CONNECTION_CLOSE);
 
 		{
 			int status_code = STATUS_TO_CODE[response.status];
@@ -333,6 +338,9 @@ int main(int argc, char **argv)
 
 		headers_clear(response.headers);
 		free(response.body);
+
+		if (should_close)
+			break;
 	}
 
 	close(server_fd);
