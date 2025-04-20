@@ -1,0 +1,13 @@
+{
+    "files.associations": {
+        "unistd.h": "c",
+        "stat.h": "c",
+        "server.h": "c",
+        "http.h": "c",
+        "cstddef": "c",
+        "stddef.h": "c",
+        "xtr1common": "c",
+        "string.h": "c",
+        "stdlib.h": "c"
+    }
+}
