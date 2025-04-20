@@ -20,10 +20,9 @@ size_t recv_line(int fd, char *buffer, size_t length)
 	{
 		char value = 0;
 
-		if (recv(fd, &value, 1, 0) != 1)
-		{
-			return (-1);
-		}
+		size_t recv_result = recv(fd, &value, 1, 0);
+		if (recv_result != 1)
+			return (recv_result);
 
 		if (value == '\n')
 		{
@@ -91,6 +90,9 @@ int main(int argc, char **argv)
 		return (1);
 	}
 
+	int client_id_increment = 0;
+	int client_id = 0;
+
 	int client_fd;
 	while (true)
 	{
@@ -103,7 +105,8 @@ int main(int argc, char **argv)
 			return (1);
 		}
 
-		printf("Client connected\n");
+		client_id = ++client_id_increment;
+		printf("%d: connected\n", client_id);
 
 		pid_t pid = fork();
 		if (pid == -1)
@@ -121,210 +124,220 @@ int main(int argc, char **argv)
 		break;
 	}
 
-	char buffer[512];
-	if (recv_line(client_fd, buffer, sizeof(buffer)) == -1)
+	while (true)
 	{
-		perror("recv_line");
-		return (1);
-	}
-
-	request_t request = {};
-	/* parse request */ {
-		char *method = strtok(buffer, " ");
-		char *path = strtok(method + strlen(method) + 1, " ");
-		char *version = strtok(path + strlen(path) + 1, " ");
-
-		printf("method=`%s` path=`%s` version=`%s`\n", method, path, version);
-
-		request.method = method_valueof(method);
-		request.path = strdup(path);
-
-		while (true)
+		char buffer[512];
+		size_t request_line_length = recv_line(client_fd, buffer, sizeof(buffer));
+		if (request_line_length == -1)
 		{
-			size_t length = recv_line(client_fd, buffer, sizeof(buffer));
-			if (length == -1)
-			{
-				perror("recv_line");
-				return (1);
-			}
-
-			if (length == 0)
-			{
-				break;
-			}
-
-			char *key = strtok(buffer, ": ");
-			char *value = key + strlen(key) + 1;
-
-			while (*value == ' ')
-				++value;
-
-			request.headers = headers_add(request.headers, key, value);
+			perror("recv_line");
+			return (1);
 		}
+		else if (request_line_length == 0)
+			break;
 
-		if (request.method == POST)
-		{
-			int content_length = atoi(headers_get(request.headers, CONTENT_LENGTH) ?: "0");
-			unsigned char *body = malloc(content_length);
+		request_t request = {};
+		/* parse request */ {
+			char *method = strtok(buffer, " ");
+			char *path = strtok(method + strlen(method) + 1, " ");
+			char *version = strtok(path + strlen(path) + 1, " ");
 
-			if (recv(client_fd, body, content_length, 0) == -1)
+			printf("%d: method=`%s` path=`%s` version=`%s`\n", client_id, method, path, version);
+
+			request.method = method_valueof(method);
+			request.path = strdup(path);
+
+			while (true)
 			{
-				perror("recv ~ request body");
-				return (1);
-			}
-
-			request.body = body;
-			request.body_length = content_length;
-		}
-	}
-
-	response_t response = {};
-	response.status = NOT_FOUND;
-
-	if (strcmp("/", request.path) == 0)
-	{
-		response.status = OK;
-	}
-	else if (strncmp("/echo/", request.path, 6) == 0)
-	{
-		char *body = strdup(request.path + 6);
-
-		response.status = OK;
-		response.headers = headers_add(response.headers, CONTENT_TYPE, TEXT_PLAIN);
-		response.body = body;
-		response.body_length = strlen(body);
-	}
-	else if (strcmp("/user-agent", request.path) == 0)
-	{
-		char *body = strdup(headers_get(request.headers, USER_AGENT));
-
-		response.status = OK;
-		response.headers = headers_add(response.headers, CONTENT_TYPE, TEXT_PLAIN);
-		response.body = body;
-		response.body_length = strlen(body);
-	}
-	else if (strncmp("/files/", request.path, 7) == 0)
-	{
-		char *path = request.path + 7;
-
-		if (request.method == GET)
-		{
-			int fd = open(path, O_RDONLY);
-			if (fd != -1)
-			{
-				struct stat statbuf;
-				fstat(fd, &statbuf);
-
-				size_t length = statbuf.st_size;
-				unsigned char *body = malloc(length);
-				read(fd, body, length);
-
-				close(fd);
-
-				response.status = OK;
-				response.headers = headers_add(response.headers, CONTENT_TYPE, APPLICATION_OCTET_STREAM);
-				response.body = body;
-				response.body_length = length;
-			}
-		}
-		else if (request.method == POST)
-		{
-			int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC);
-			if (fd != -1)
-			{
-				write(fd, request.body, request.body_length);
-
-				close(fd);
-
-				response.status = CREATED;
-			}
-		}
-	}
-
-	if (response.body)
-	{
-		const char *accept_encodings = headers_get(request.headers, ACCEPT_ENCODING);
-		if (accept_encodings)
-		{
-			encoder_t encoder = NULL;
-
-			char *accept_encoding = strtok((char*)accept_encodings, COMA);
-			while (accept_encoding)
-			{
-				while (*accept_encoding == ' ')
-					++accept_encoding;
-
-				encoder = encoder_get(accept_encoding);
-				if (encoder)
+				size_t length = recv_line(client_fd, buffer, sizeof(buffer));
+				if (length == -1)
 				{
-					response.headers = headers_add(response.headers, CONTENT_ENCODING, accept_encoding);
+					perror("recv_line");
+					return (1);
+				}
+
+				if (length == 0)
+				{
 					break;
 				}
 
-				accept_encoding = strtok(NULL, COMA);
+				char *key = strtok(buffer, ": ");
+				char *value = key + strlen(key) + 1;
+
+				while (*value == ' ')
+					++value;
+
+				request.headers = headers_add(request.headers, key, value);
 			}
 
-			if (encoder)
+			if (request.method == POST)
 			{
-				unsigned char *old_body = response.body;
-				response.body_length = encoder(old_body, response.body_length, &response.body);
-				free(old_body);
+				int content_length = atoi(headers_get(request.headers, CONTENT_LENGTH) ?: "0");
+				unsigned char *body = malloc(content_length);
+
+				if (recv(client_fd, body, content_length, 0) == -1)
+				{
+					perror("recv ~ request body");
+					return (1);
+				}
+
+				request.body = body;
+				request.body_length = content_length;
 			}
 		}
 
-		response.headers = headers_add_number(response.headers, CONTENT_LENGTH, response.body_length);
-	}
+		response_t response = {};
+		response.status = NOT_FOUND;
 
-	{
-		int status_code = STATUS_TO_CODE[response.status];
-		const char *status_phrase = STATUS_TO_PHRASE[response.status];
+		if (strcmp("/", request.path) == 0)
+		{
+			response.status = OK;
+		}
+		else if (strncmp("/echo/", request.path, 6) == 0)
+		{
+			char *body = strdup(request.path + 6);
 
-		sprintf(buffer, "HTTP/1.1 %d %s\r\n", status_code, status_phrase);
-	}
+			response.status = OK;
+			response.headers = headers_add(response.headers, CONTENT_TYPE, TEXT_PLAIN);
+			response.body = body;
+			response.body_length = strlen(body);
+		}
+		else if (strcmp("/user-agent", request.path) == 0)
+		{
+			char *body = strdup(headers_get(request.headers, USER_AGENT));
 
-	if (send(client_fd, buffer, strlen(buffer), 0) == -1)
-	{
-		perror("send ~ request line");
-		return (1);
-	}
+			response.status = OK;
+			response.headers = headers_add(response.headers, CONTENT_TYPE, TEXT_PLAIN);
+			response.body = body;
+			response.body_length = strlen(body);
+		}
+		else if (strncmp("/files/", request.path, 7) == 0)
+		{
+			char *path = request.path + 7;
 
-	header_t *header = response.headers;
-	while (header)
-	{
-		sprintf(buffer, "%s: %s\r\n", header->key, header->value);
+			if (request.method == GET)
+			{
+				int fd = open(path, O_RDONLY);
+				if (fd != -1)
+				{
+					struct stat statbuf;
+					fstat(fd, &statbuf);
+
+					size_t length = statbuf.st_size;
+					unsigned char *body = malloc(length);
+					read(fd, body, length);
+
+					close(fd);
+
+					response.status = OK;
+					response.headers = headers_add(response.headers, CONTENT_TYPE, APPLICATION_OCTET_STREAM);
+					response.body = body;
+					response.body_length = length;
+				}
+			}
+			else if (request.method == POST)
+			{
+				int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC);
+				if (fd != -1)
+				{
+					write(fd, request.body, request.body_length);
+
+					close(fd);
+
+					response.status = CREATED;
+				}
+			}
+		}
+
+		if (response.body)
+		{
+			const char *accept_encodings = headers_get(request.headers, ACCEPT_ENCODING);
+			if (accept_encodings)
+			{
+				encoder_t encoder = NULL;
+
+				char *accept_encoding = strtok((char *)accept_encodings, COMA);
+				while (accept_encoding)
+				{
+					while (*accept_encoding == ' ')
+						++accept_encoding;
+
+					encoder = encoder_get(accept_encoding);
+					if (encoder)
+					{
+						response.headers = headers_add(response.headers, CONTENT_ENCODING, accept_encoding);
+						break;
+					}
+
+					accept_encoding = strtok(NULL, COMA);
+				}
+
+				if (encoder)
+				{
+					unsigned char *old_body = response.body;
+					response.body_length = encoder(old_body, response.body_length, &response.body);
+					free(old_body);
+				}
+			}
+
+			response.headers = headers_add_number(response.headers, CONTENT_LENGTH, response.body_length);
+		}
+		else
+			response.headers = headers_add_number(response.headers, CONTENT_LENGTH, 0);
+
+		{
+			int status_code = STATUS_TO_CODE[response.status];
+			const char *status_phrase = STATUS_TO_PHRASE[response.status];
+
+			sprintf(buffer, "HTTP/1.1 %d %s\r\n", status_code, status_phrase);
+		}
 
 		if (send(client_fd, buffer, strlen(buffer), 0) == -1)
 		{
-			perror("send ~ header");
+			perror("send ~ request line");
 			return (1);
 		}
 
-		header = header->next;
-	}
-
-	if (send(client_fd, "\r\n", 2, 0) == -1)
-	{
-		perror("send ~ request header end");
-		return (1);
-	}
-
-	if (response.body)
-	{
-		if (send(client_fd, response.body, response.body_length, 0) == -1)
+		header_t *header = response.headers;
+		while (header)
 		{
-			perror("send ~ body");
+			sprintf(buffer, "%s: %s\r\n", header->key, header->value);
+
+			if (send(client_fd, buffer, strlen(buffer), 0) == -1)
+			{
+				perror("send ~ header");
+				return (1);
+			}
+
+			header = header->next;
+		}
+
+		if (send(client_fd, "\r\n", 2, 0) == -1)
+		{
+			perror("send ~ request header end");
 			return (1);
 		}
+
+		if (response.body)
+		{
+			if (send(client_fd, response.body, response.body_length, 0) == -1)
+			{
+				perror("send ~ body");
+				return (1);
+			}
+		}
+
+		free(request.path);
+		headers_clear(request.headers);
+		free(request.body);
+
+		headers_clear(response.headers);
+		free(response.body);
 	}
-
-	free(request.path);
-	headers_clear(request.headers);
-	free(request.body);
-
-	headers_clear(response.headers);
-	free(response.body);
 
 	close(server_fd);
+
+	printf("%d: disconnected\n", client_id);
 
 	return 0;
 }
